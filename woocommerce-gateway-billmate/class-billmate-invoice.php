@@ -848,7 +848,7 @@ parse_str($_POST['post_data'], $datatemp);
 		global $woocommerce;
 
 		$importedCountry = '';
-		if(!(BillmateCountry::getCode($addr[0][5]) == 'se' && WPLANG == 'sv_SE' )){
+		if(!(BillmateCountry::getCode($addr[0][5]) == 'se' && get_locale() == 'sv_SE' )){
 			$importedCountry = $woocommerce->countries->countries[BillmateCountry::getCode($addr[0][5])];
 		}
 
@@ -1143,34 +1143,41 @@ class WC_Gateway_Billmate_Invoice_Extra {
 	}
 
 	/**
-	 * Add the invoice fee to the cart if Payson Invoice is selected payment method, if this is WC 2.0 and if invoice fee is used.
+	 * Add the invoice fee to the cart if Billmate Invoice is selected payment method, if this is WC 2.0 and if invoice fee is used.
 	 **/
-	 function add_invoice_fee_process() {
-		 global $woocommerce;
+    function add_invoice_fee_process() {
+      global $woocommerce;
 
-		 // Only run this if Billmate Invoice is the choosen payment method and this is WC +2.0
-		 if (isset($_POST['payment_method']) && $_POST['payment_method'] == 'billmate' && version_compare( WOOCOMMERCE_VERSION, '2.0', '>=' )) {
+      // Only run this if Billmate Invoice is the choosen payment method and this is WC +2.0
+      if (isset($_POST['payment_method']) && $_POST['payment_method'] == 'billmate' && version_compare( WOOCOMMERCE_VERSION, '2.0', '>=' )) {
+        $invoice_fee = new WC_Gateway_Billmate_Invoice;
+        $this->invoice_fee_id = $invoice_fee->get_billmate_invoice_fee_product();
+        //if( empty( $this->invoice_fee_id  ) ) throw new Exception(__('Missing Invoice Fee') );
+        $product = get_product($this->invoice_fee_id);
 
-		 	$invoice_fee = new WC_Gateway_Billmate_Invoice;
-		 	$this->invoice_fee_id = $invoice_fee->get_billmate_invoice_fee_product();
-		 	//if( empty( $this->invoice_fee_id  ) ) throw new Exception(__('Missing Invoice Fee') );
-		 	$product = get_product($this->invoice_fee_id);
+        if ( function_exists( 'get_product' ) ) {
+          $product = get_product($this->invoice_fee_id);
+        } else {
+          $product = new WC_Product( $this->invoice_fee_id );
+        }
 
-		 	if ( !empty($this->invoice_fee_id) && $product->exists() ) :
+        if ((is_object($product) && $product->exists())) :
 
-		 		// Is this a taxable product?
-		 		if ( $product->is_taxable() ) {
-			 		$product_tax = true;
-		 		} else {
-			 		$product_tax = false;
-		 		}
+          if ( !empty($this->invoice_fee_id) ) :
 
-    	   	 	$woocommerce->cart->add_fee($product->get_title(),$product->get_price_excluding_tax(),$product_tax,$product->get_tax_class());
+            // Is this a taxable product?
+            if ( $product->is_taxable() ) {
+  			 		  $product_tax = true;
+            } else {
+              $product_tax = false;
+            }
 
-    	    endif;
+            $woocommerce->cart->add_fee($product->get_title(),$product->get_price_excluding_tax(),$product_tax,$product->get_tax_class());
 
-		}
-	} // End function add_invoice_fee_process
+          endif;
+        endif;
+		  }
+    } // End function add_invoice_fee_process
 
 
 
