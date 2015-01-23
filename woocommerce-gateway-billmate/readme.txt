@@ -1,7 +1,7 @@
 === WOOCOMMERCE BILLMATE GATEWAY ===
 
 Original code created by Niklas Högefjord - http://krokedil.com/
-Modified for Billmate by Gagan Preet, Eminence Technology
+Modified for Billmate by Gagan Preet, Eminence Technology.
 
 Documentation with instructions on how to setup the plugin can be found at http://billmate.se/plugins/manual/Installation_Manual_Woocommerce_Billmate.pdf
 
