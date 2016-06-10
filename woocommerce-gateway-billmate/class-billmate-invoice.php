@@ -601,6 +601,10 @@ parse_str($_POST['post_data'], $datatemp);
 			wc_bm_errors('<span data-error-code="'.$addr['code'].'"></span>'.utf8_encode($addr['message']));
 			return;
 		}
+		
+		// WM: Abort before the address is populated
+		return;
+		
 		foreach($addr as $key => $value){
 			$addr[$key] = utf8_encode(utf8_decode($value));
 		}
