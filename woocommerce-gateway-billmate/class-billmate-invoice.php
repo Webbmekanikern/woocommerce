@@ -348,11 +348,11 @@ class WC_Gateway_Billmate_Invoice extends WC_Gateway_Billmate {
 		<?php endif; ?>
 
 		<fieldset>
-			<p class="form-row" id="invoice_pno">
 				<?php if ( $this->shop_country == 'NL' || $this->shop_country == 'DE' ) : ?>
 
-				<label for="billmate_pno"><?php echo __("Personal / Corporate ", 'billmate') ?> <span class="required">*</span></label>
-				<span class="dob">
+				<p class="form-row" id="invoice_pno">
+					<label for="billmate_pno"><?php echo __("Personal / Corporate ", 'billmate') ?> <span class="required">*</span></label>
+					<span class="dob">
                     <select class="dob_select dob_day" name="billmate_invo_date_of_birth_day" style="width:60px;">
                         <option value="">
                         <?php echo __("Day", 'billmate') ?>
@@ -493,12 +493,19 @@ class WC_Gateway_Billmate_Invoice extends WC_Gateway_Billmate {
                         <option value="2000">2000</option>
                     </select>
                 </span><!-- .dob -->
-
+					</p>
 				<?php else : ?>
-					<label for="billmate_invo_pno"><?php echo __("Social Security Number / Corporate Registration Number", 'billmate') ?> <span class="required">*</span></label>
-					<input type="text" class="input-text" name="billmate_invo_pno" id="billmate_invo_pno" />
+					<p class="form-row" id="invoice_pno">
+						<label for="billmate_invo_pno"><?php echo __("Social Security Number / Corporate Registration Number", 'billmate') ?> <span class="required">*</span></label>
+						<input type="text" class="input-text" name="billmate_invo_pno" id="billmate_invo_pno" />
+					</p>
+					
+					<p class="form-row validate-required validate-email">
+						<label for="billmate_invo_email">E-postadress för faktura <span class="required">*</span></label>
+						<input type="email" class="input-text" name="billmate_invo_email" id="billmate_invo_email" />
+					</p>
 				<?php endif; ?>
-			</p>
+			
 
 			<?php if ( $this->shop_country == 'NL' || $this->shop_country == 'DE' ) : ?>
 				<p class="form-row form-row-last">
@@ -521,8 +528,8 @@ parse_str($_POST['post_data'], $datatemp);
 ?>
 		<div class="clear"></div>
 			<p class="form-row">
-				<input type="checkbox" class="input-checkbox" checked="checked" value="yes" name="valid_email_it_is_invoice" id="valid_email_it_is_invoice" style="float:left;margin-top:6px" />
-				<label><?php echo sprintf(__('My e-mail%s is correct och and may be used for billing. I confirm the ', 'billmate'), (strlen($datatemp['billing_email']) > 0) ? ', '.$datatemp['billing_email'].',' : ' '); ?><a href="https://billmate.se/billmate/?cmd=villkor" onclick="window.open(this.href,'targetWindow','toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=600,height=650');return false;"><?php echo __('terms of partpayment','billmate'); ?></a> <?php echo __('and accept the liability.','billmate') ?></label>
+				<input type="checkbox" class="input-checkbox" checked="checked" value="yes" name="valid_email_it_is_invoice" id="valid_email_it_is_invoice" />
+				<label for="valid_email_it_is_invoice">E-postadressen ovan är korrekt och får användas för fakturering. Jag bekräftar <a rel="nofollow" target="_blank" href="https://billmate.se/billmate/?cmd=villkor" onclick="window.open(this.href,'targetWindow','toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=600,height=650');return false;">Billmates köpvillkor</a> och accepterar betalningsansvaret.</label>
 			</p>
 		<div class="clear"></div>
 
@@ -679,7 +686,7 @@ parse_str($_POST['post_data'], $datatemp);
 		$order = new WC_order( $order_id );
 
 		if(empty($_POST['valid_email_it_is_invoice'])){
-            wc_bm_errors( sprintf( __('Please confirm the email %s is correct. The email will be used for invoicing.', 'billmate'), $order->billing_email ));
+            wc_bm_errors( sprintf( __('Please confirm the email %s is correct. The email will be used for invoicing.', 'billmate'), $order->billmate_invoice_email ));
             return;
 		}
 
@@ -1028,13 +1035,13 @@ parse_str($_POST['post_data'], $datatemp);
 				'city' => utf8_encode(utf8_decode($order->billing_city)),
 				'country' => $order->billing_country,
 				'phone' => $order->billing_phone,
-				'email' => $order->billing_email
+				'email' => $order->billmate_invoice_email
 			)
 		);
 		// Shipping address
 		if ( $order->get_shipping_method() == '' ) {
 
-			$email = $order->billing_email;
+			$email = $order->billmate_invoice_email;
 			$telno = ''; //We skip the normal land line phone, only one is needed.
 			$cellno = $order->billing_phone;
 			$company = utf8_encode(utf8_decode($order->billing_company));
@@ -1050,7 +1057,7 @@ parse_str($_POST['post_data'], $datatemp);
 			$countryCode = $order->billing_country;
 
 		} else {
-			$email = $order->billing_email;
+			$email = $order->billmate_invoice_email;
 			$telno = ''; //We skip the normal land line phone; only one is needed.
 			$cellno = $order->billing_phone;
 			$company = utf8_encode(utf8_decode($order->shipping_company));
@@ -1304,6 +1311,28 @@ class WC_Gateway_Billmate_Invoice_Extra {
 		// Chcek Billmate specific fields on Checkout
 		//add_action('woocommerce_checkout_process', array(&$this, 'billmate_invoice_checkout_field_process'));
 		add_action('woocommerce_cart_calculate_fees', array(&$this, 'billmate_invoice_checkout_field_process'));
+		
+		// Validate and save invoice email
+		add_action('woocommerce_after_checkout_validation', array($this, 'validate_invoice_email'));
+		add_action('woocommerce_checkout_update_order_meta', array($this, 'save_invoice_email'));
+	}
+	
+	public function validate_invoice_email($posted) {
+		if(!isset($_POST['payment_method']) || $_POST['payment_method'] !== 'billmate_invoice') return;
+		
+		if(!is_email($_POST['billmate_invo_email'])) {
+			throw new Exception('E-postadressen för faktura verkar felaktig - vänligen dubbelkolla och prova igen.');
+		}
+	}
+	
+	public function save_invoice_email($order_id) {
+		if(!isset($_POST['payment_method']) || $_POST['payment_method'] !== 'billmate_invoice') return;
+		
+		$email = sanitize_email($_POST['billmate_invo_email']);
+		
+		if(!$email) return;
+		
+		update_post_meta($order_id, '_billmate_invoice_email', $email);
 	}
 
 	/**
