@@ -1,5 +1,5 @@
 #Billmate Payment Gateway for WooCommerce
-Forked from [Billmate AB](https://github.com/Billmate/woocommerce)
+Forked from [Billmate AB](https://github.com/Billmate/woocommerce) by [Webbmekanikern](http://www.webbmekanikern.se/).
 
 ##Description
 As we had issues between Billmate and larger companies/organizations, some minor adjustments had to be made:
