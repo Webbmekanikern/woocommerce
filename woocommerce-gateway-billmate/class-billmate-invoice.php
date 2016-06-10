@@ -766,7 +766,7 @@ parse_str($_POST['post_data'], $datatemp);
 		$prepareDiscount = array();
 		$orderid = ltrim($order->get_order_number(),'#');
 		$orderValues['PaymentData'] = array(
-			'method' => 1,
+			'method' => 2, // <- WM: Use Invoice Service instead of Factoring
 			'currency' => get_woocommerce_currency(),
 			'language' => $lang[0],
 			'country' => $country,
