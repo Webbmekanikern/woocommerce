@@ -6,4 +6,4 @@ As we had issues between Billmate and larger companies/organizations, some minor
 
 * Uses Billmate Invoice Service, instead of Factoring.
 * Doesn't prefill, prompt or force the customer to use the registered address for the company.
-* Activate the invoice the order status is changed to Processing, instead of Completed.
+* Activates the invoice when the order status is changed to Processing, instead of Completed.
