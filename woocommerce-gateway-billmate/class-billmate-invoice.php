@@ -329,6 +329,12 @@ class WC_Gateway_Billmate_Invoice extends WC_Gateway_Billmate {
 	function payment_fields() {
 	   	global $woocommerce;
 		$billmate_description = strlen($this->description) ? $this->description : '';
+			if(isset($_POST['post_data'])) {
+				parse_str($_POST['post_data'], $post_data);
+			}
+			else {
+				$post_data = $_POST;
+			}
 	   	?>
 
 	   	<?php if ($this->testmode=='yes') : ?><p><?php _e('TEST MODE ENABLED', 'billmate'); ?></p><?php endif; ?>
@@ -497,12 +503,12 @@ class WC_Gateway_Billmate_Invoice extends WC_Gateway_Billmate {
 				<?php else : ?>
 					<p class="form-row" id="invoice_pno">
 						<label for="billmate_invo_pno"><?php echo __("Social Security Number / Corporate Registration Number", 'billmate') ?> <span class="required">*</span></label>
-						<input type="text" class="input-text" name="billmate_invo_pno" id="billmate_invo_pno" />
+						<input type="text" class="input-text" name="billmate_invo_pno" id="billmate_invo_pno" value="<?php echo isset($post_data['billmate_invo_pno']) ? esc_attr($post_data['billmate_invo_pno']) : ''; ?>" />
 					</p>
 					
 					<p class="form-row validate-required validate-email">
 						<label for="billmate_invo_email">E-postadress för faktura <span class="required">*</span></label>
-						<input type="email" class="input-text" name="billmate_invo_email" id="billmate_invo_email" />
+						<input type="email" class="input-text" name="billmate_invo_email" id="billmate_invo_email" value="<?php echo isset($post_data['billmate_invo_email']) ? esc_attr($post_data['billmate_invo_email']) : ''; ?>" />
 					</p>
 				<?php endif; ?>
 			
