@@ -855,11 +855,16 @@ parse_str($_POST['post_data'], $datatemp);
 			}
 
 			$priceExcl = round($item_price - (100 * $order->get_item_tax($item,false)));
+			$item_name = $item['name'];
+			
+			if($_product->is_type('variation')) {
+				$item_name .= ' - ' . $_product->get_formatted_variation_attributes(true);
+			}
 
 			$orderValues['Articles'][] = array(
 				'quantity'   => (int)$item['qty'],
 				'artnr'    => $sku,
-				'title'    => $item['name'],
+				'title'    => apply_filters('billmate_item_name', $item_name, $item, $_product, $order),
 				'aprice'    =>  ($discount) ? ($billmate_item_standard_price_without_tax) : ($priceExcl),
 				'taxrate'      => (int)$item_tax_percentage,
 				'discount' => ($discount) ? round((1 - ($billmate_item_price_including_tax/$billmate_item_standard_price)) * 100 ,0) : 0,
