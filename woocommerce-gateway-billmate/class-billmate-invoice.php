@@ -257,6 +257,10 @@ class WC_Gateway_Billmate_Invoice extends WC_Gateway_Billmate {
     	<h3><?php _e('Billmate Invoice', 'billmate'); ?></h3>
 
 	    	<p><?php _e('With Billmate your customers can pay by invoice. Billmate works by adding extra personal information fields and then sending the details to Billmate for verification.','billmate'); ?></p>
+            <p>
+                <a href="https://billmate.se/plugins/manual/Installationsmanual_Woocommerce_Billmate.pdf" target="_blank">Installationsmanual Billmate Modul ( Manual Svenska )</a><br />
+                <a href="https://billmate.se/plugins/manual/Installation_Manual_Woocommerce_Billmate.pdf" target="_blank">Installation Manual Billmate ( Manual English )</a>
+            </p>
 			<?php if(isset($this->invoice_fee_id) && $this->invoice_fee_id != ''): ?>
 
 			<i class="ui-icon ui-icon-info"></i><div><?php printf(__('You may inactivate or remove the invoice fee product with id %s','billmate'),$this->invoice_fee_id); ?></div>
@@ -626,7 +630,7 @@ parse_str($_POST['post_data'], $datatemp);
 		$lastArr  = explode(' ', $_POST['billing_first_name']);
 
 		$usership = $_POST['billing_first_name'].' '.$_POST['billing_last_name'].' '.$_POST['billing_company'];
-		$userbill = $_POST['shipping_first_name'].' '.$_POST['shipping_last_name'].' '.$_POST['shipping_company'];
+		$userbill = (isset($_POST['shipping_first_name']) && isset($_POST['shipping_last_name']) && isset($_POST['shipping_company'])) ? $_POST['shipping_first_name'].' '.$_POST['shipping_last_name'].' '.$_POST['shipping_company'] : $usership;
 
 		if( strlen( $addr['firstname'] )) {
 			$name = $addr['firstname'];
@@ -647,14 +651,17 @@ parse_str($_POST['post_data'], $datatemp);
 		                      !isEqual($addr['zip'], $_POST['billing_postcode']) ||
 		                      !isEqual($addr['city'], $_POST['billing_city']) ||
 		                      !isEqual(strtoupper($addr['country']), strtoupper($_POST['billing_country']));
+		if(isset($_POST['shipping_address_1']) && isset($_POST['shipping_postcode']) && isset($_POST['shipping_city']) && isset($_POST['shipping_country'])) {
+			$shippingAndBilling = !isEqual($usership, $userbill) ||
+				!isEqual($_POST['billing_address_1'], $_POST['shipping_address_1']) ||
+				!isEqual($_POST['billing_postcode'], $_POST['shipping_postcode']) ||
+				!isEqual($_POST['billing_city'], $_POST['shipping_city']) ||
+				!isEqual($_POST['billing_country'], $_POST['shipping_country']);
 
-		$shippingAndBilling=  !isEqual($usership,$userbill ) ||
-		                      !isEqual($_POST['billing_address_1'], $_POST['shipping_address_1'] ) ||
-		                      !isEqual($_POST['billing_postcode'], $_POST['shipping_postcode']) ||
-		                      !isEqual($_POST['billing_city'], $_POST['shipping_city']) ||
-		                      !isEqual($_POST['billing_country'], $_POST['shipping_country']);
-		
-		$shippingAndBilling = (isset($_POST['ship_to_different_address']) && $_POST['ship_to_different_address'] == 1) ? $shippingAndBilling : false;
+			$shippingAndBilling = (isset($_POST['ship_to_different_address']) && $_POST['ship_to_different_address'] == 1) ? $shippingAndBilling : false;
+		} else {
+			$shippingAndBilling = false;
+		}
 
 		global $woocommerce;
 
@@ -820,6 +827,9 @@ parse_str($_POST['post_data'], $datatemp);
 
 			}
 
+            /* Formatting the product data that will be sent as api requests */
+            $billmateProduct = new BillmateProduct($_product);
+
 			// is product taxable?
 			if ($_product->is_taxable())
 			{
@@ -855,16 +865,11 @@ parse_str($_POST['post_data'], $datatemp);
 			}
 
 			$priceExcl = round($item_price - (100 * $order->get_item_tax($item,false)));
-			$item_name = $item['name'];
-			
-			if($_product->is_type('variation')) {
-				$item_name .= ' - ' . $_product->get_formatted_variation_attributes(true);
-			}
 
 			$orderValues['Articles'][] = array(
 				'quantity'   => (int)$item['qty'],
 				'artnr'    => $sku,
-				'title'    => apply_filters('billmate_item_name', $item_name, $item, $_product, $order),
+				'title'    =>  $billmateProduct->getTitle(),
 				'aprice'    =>  ($discount) ? ($billmate_item_standard_price_without_tax) : ($priceExcl),
 				'taxrate'      => (int)$item_tax_percentage,
 				'discount' => ($discount) ? round((1 - ($billmate_item_price_including_tax/$billmate_item_standard_price)) * 100 ,0) : 0,
@@ -881,6 +886,14 @@ parse_str($_POST['post_data'], $datatemp);
 
 			//endif;
 		endforeach; endif;
+
+        /* Add additional fees that are not invoice fee to order API request as articles */
+        $orderFeesArticles = BillmateOrder::getOrderFeesAsOrderArticles();
+        $orderValues['Articles'] = array_merge($orderValues['Articles'], $orderFeesArticles);
+        foreach($orderFeesArticles AS $orderFeesArticle) {
+            $total += $orderFeesArticle['aprice'];
+            $totalTax += ($orderFeesArticle['aprice'] * ($orderFeesArticle['taxrate']/100));
+        }
 
 		// Discount
 		if ($order->order_discount>0) :
