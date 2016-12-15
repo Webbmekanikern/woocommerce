@@ -1013,7 +1013,7 @@ if(!class_exists('BillmateProduct')) {
             if($this->product->is_type('variation')) {
                 $name .= ' - ' . $this->product->get_formatted_variation_attributes(true);
             }
-            return $name;
+            return apply_filters('billmate_product_title', $name, $this->product);
         }
     }
 }
