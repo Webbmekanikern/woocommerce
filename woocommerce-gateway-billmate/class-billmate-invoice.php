@@ -908,7 +908,7 @@ parse_str($_POST['post_data'], $datatemp);
 		$prepareDiscount = array();
 		$orderid = ltrim($order->get_order_number(),'#');
 		$orderValues['PaymentData'] = array(
-			'method' => 2,
+			'method' => 1,
 			'currency' => get_woocommerce_currency(),
 			'language' => $lang[0],
 			'country' => $country,
@@ -1271,7 +1271,25 @@ parse_str($_POST['post_data'], $datatemp);
 			'country' => $order->billing_country,
 			'phone' => $cellno
 		);
+		
+		try {
+			return $this->add_payment($orderValues, $order, $k);
+		}
+		catch(Exception $e) {
+			$new_method = 2;
+			$order->add_order_note(sprintf('Billmate error %s for method %d, trying method %d instead.', $e->getCode(), $orderValues['PaymentData']['method'], $new_method));
+			$orderValues['PaymentData']['method'] = $new_method;
+			
+			return $this->add_payment($orderValues, $order, $k);
+		}
 
+	}
+	
+	protected function add_payment($orderValues = array(), $order = null, $k = null) {
+		global $woocommerce;
+		
+		$order_id = $order->id;
+		
 		try {
 			$result = $k->addPayment($orderValues);
 			if( !is_array($result)){
@@ -1402,7 +1420,6 @@ parse_str($_POST['post_data'], $datatemp);
 			}
 
 		}
-
 	}
 
 	/**
