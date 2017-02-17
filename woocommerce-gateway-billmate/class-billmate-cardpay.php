@@ -132,9 +132,13 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 	function check_ipn_response() {
 		global $woocommerce;
 		//header( 'HTTP/1.1 200 OK' );
+        $checkoutMessageCancel = __('The card payment has been canceled before it was processed. Please try again or choose a different payment method.','billmate');
+        $checkoutMessageFail = __('Unfortunately your card payment was not processed with the provided card details. Please try again or choose another payment method.','billmate');
 		$recurring = false;
+		$cancel_url_hit = false;
+		$accept_url_hit = false;
 		$k = new Billmate($this->eid,$this->secret,true,$this->testmode,false);
-		if( !empty($_GET['payment']) ) {
+		if( !empty($_GET['payment']) && $_GET['payment'] == 'success' ) {
 			if(!empty($_GET['recurring']) && $_GET['recurring'] == 1){
 				$recurring = true;
 			}
@@ -147,8 +151,18 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 
 			$accept_url_hit = true;
 			$payment_note = 'Note: Payment Completed Accept Url.';
+		} elseif (!empty($_GET['payment']) && $_GET['payment'] == 'cancel'){
+			if( empty( $_POST ) ){
+				$_POST = $_GET;
+			}
+			$input = file_get_contents('php://input');
+			if(is_array($input))
+				$_POST = array_merge($_POST, $input);
+
+			$cancel_url_hit = true;
+			$payment_note = 'Note: Payment Cancelled.';
 		} else {
-            $_POST = (is_array($_GET) && $_GET['data']) ? $_GET : file_get_contents("php://input");
+            $_POST = (is_array($_GET) && isset($_GET['data'])) ? $_GET : file_get_contents("php://input");
             $accept_url_hit = false;
 			$payment_note = 'Note: Payment Completed (callback success).';
 		}
@@ -187,23 +201,47 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 			if($accept_url_hit) {
 				wp_safe_redirect($redirect);
 				exit;
+			} elseif($cancel_url_hit) {
+				if(isset($data['status']) AND $data['status'] == 'Failed') {
+					wc_bm_errors($checkoutMessageFail);
+				} elseif(isset($data['status']) AND $data['status'] == 'Cancelled') {
+					wc_bm_errors($checkoutMessageCancel);
+				}
+
+				wp_safe_redirect($woocommerce->cart->get_checkout_url());
+				exit;
+
 			}
 			else
 				wp_die('OK','ok',array('response' => 200));
 		}
 		// Set Transient if not exists to prevent multiple callbacks
 		set_transient('billmate_cardpay_order_id_'.$order_id,true,3600);
-		if(isset($data['code']) || isset($data['error'])){
-			if($data['error_message'] == 'Invalid credit bank number') {
-				$error_message = 'Tyvärr kunde inte din betalning genomföras';
+		if(isset($data['code']) || isset($data['error']) || ($cancel_url_hit) || $data['status'] == 'Failed'){
+			if($data['status'] == 'Failed') {
+                $error_message = $checkoutMessageFail;
 			} else {
-				$error_message = $data['message'];
+				$error_message = $checkoutMessageCancel;
 			}
+
 			$order->add_order_note( __($error_message, 'billmate') );
-			wc_bm_errors($error_message);
+
 			if($accept_url_hit) {
+				delete_transient('billmate_cardpay_order_id_'.$order_id);
+
 				wp_safe_redirect(add_query_arg('key', $order->order_key,
 						add_query_arg('order', $order_id, get_permalink(get_option('woocommerce_checkout_page_id')))));
+				exit;
+				return false;
+			} elseif($cancel_url_hit){
+				if($data['status'] == 'Failed') {
+					wc_bm_errors($checkoutMessageFail);
+				} else {
+					wc_bm_errors($checkoutMessageCancel);
+				}
+				delete_transient('billmate_cardpay_order_id_'.$order_id);
+
+				wp_safe_redirect($woocommerce->cart->get_checkout_url());
 				exit;
 				return false;
 			} else {
@@ -215,7 +253,7 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 		} else {
 			$order_status_terms = wp_get_object_terms( $order_id, 'shop_order_status', array('fields' => 'slugs') ); $order_status = $order_status_terms[0];
 		}
-		if( in_array($order_status, array('pending')) ){
+		if( in_array($order_status, array('pending','cancelled')) ){
 			//$order->update_status('completed', $payment_note);
 			if($data['status'] == 'Paid') {
 				add_post_meta($order->id,'billmate_invoice_id',$data['number']);
@@ -228,8 +266,11 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 			}
 			if($data['status'] == 'Failed'){
 				$order->cancel_order('Failed payment');
-				if($accept_url_hit) {
-					wp_safe_redirect($order->get_cancel_order_url());
+				if($cancel_url_hit) {
+					delete_transient('billmate_cardpay_order_id_'.$order_id);
+
+					wc_bm_errors($checkoutMessageFail);
+					wp_safe_redirect($woocommerce->cart->get_checkout_url());
 					exit;
 				}
 				else
@@ -237,8 +278,11 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 			}
 			if($data['status'] == 'Cancelled'){
 				$order->cancel_order('Cancelled Order');
-				if($accept_url_hit) {
-					wp_safe_redirect($order->get_cancel_order_url());
+				if($cancel_url_hit) {
+					wc_bm_errors($checkoutMessageCancel);
+					delete_transient('billmate_cardpay_order_id_'.$order_id);
+
+					wp_safe_redirect($woocommerce->cart->get_checkout_url());
 					exit;
 				}
 				else
@@ -379,7 +423,10 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
     	<h3><?php _e('Billmate Cardpay', 'billmate'); ?></h3>
 
 	    	<p><?php _e('With Billmate your customers can pay by cardpay. Billmate works by adding extra personal information fields and then sending the details to Billmate for verification.', 'billmate');?></p>
-
+            <p>
+                <a href="https://billmate.se/plugins/manual/Installationsmanual_Woocommerce_Billmate.pdf" target="_blank">Installationsmanual Billmate Modul ( Manual Svenska )</a><br />
+                <a href="https://billmate.se/plugins/manual/Installation_Manual_Woocommerce_Billmate.pdf" target="_blank">Installation Manual Billmate ( Manual English )</a>
+            </p>
 
     	<table class="form-table">
     	<?php
@@ -463,10 +510,11 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 		$total = 0;
 		$totalTax = 0;
 		$prepareDiscount = array();
-		$cancel_url = html_entity_decode(get_site_url());
+		//$cancel_url = html_entity_decode(get_site_url());
 		$accept_url= trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&payment=success&recurring=1';
 
 		$callback_url = trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&recurring=1';
+		$cancel_url = trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&payment=cancel';
 
 		$url = parse_url($accept_url);
 		$language = explode('_',get_locale());
@@ -579,7 +627,6 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 		if (sizeof($order->get_items())>0) : foreach ($order->get_items() as $item) :
 			$_product = $order->get_product_from_item( $item );
 			if ($_product->exists() && $item['qty']) :
-
 				// is product taxable?
 				if ($_product->is_taxable())
 				{
@@ -734,10 +781,11 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 				$totalTax = 0;
 				$prepareDiscount = array();
 				$productTax = 0;
-				$cancel_url = html_entity_decode($woocommerce->cart->get_checkout_url());
+				//$cancel_url = html_entity_decode($woocommerce->cart->get_checkout_url());
 				$accept_url= trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&payment=success&recurring=1';
 
 				$callback_url = trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&recurring=1';
+				$cancel_url = trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&payment=cancel';
 
 				$url = parse_url($accept_url);
 				$language = explode('_',get_locale());
@@ -847,7 +895,11 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 				);
 				if (sizeof($order->get_items())>0) : foreach ($order->get_items() as $item) :
 					$_product = $order->get_product_from_item( $item );
+
 					if ($_product->exists() && $item['qty']) :
+
+                        /* Formatting the product data that will be sent as api requests */
+                        $billmateProduct = new BillmateProduct($_product);
 
 						// is product taxable?
 						if ($_product->is_taxable())
@@ -888,7 +940,7 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 						$orderValues['Articles'][] = array(
 							'quantity'   => (int)$item['qty'],
 							'artnr'    => $sku,
-							'title'    => $item['name'],
+							'title'    => $billmateProduct->getTitle(),
 							'aprice'    =>  ($discount) ? round($billmate_item_standard_price) : round($priceExcl), //+$item->unittax
 							'taxrate'      => (int)$item_tax_percentage,
 							'discount' => ($discount) ? round((1 - ($billmate_item_price_including_tax/$billmate_item_standard_price)) * 100 ,0) : 0,
@@ -1022,10 +1074,11 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 
 
 
-			$cancel_url = html_entity_decode($woocommerce->cart->get_checkout_url());
+			//$cancel_url = html_entity_decode($woocommerce->cart->get_checkout_url());
 			$accept_url= trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&payment=success';
 
 			$callback_url = trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay';
+			$cancel_url = trailingslashit (home_url()) . '?wc-api=WC_Gateway_Billmate_Cardpay&payment=cancel';
 
 			$url = parse_url($accept_url);
 
@@ -1123,7 +1176,11 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 			$prepareDiscount = array();
 			if (sizeof($order->get_items())>0) : foreach ($order->get_items() as $item) :
 				$_product = $order->get_product_from_item( $item );
+
 				if ($_product->exists() && $item['qty']) :
+
+                    /* Formatting the product data that will be sent as api requests */
+                    $billmateProduct = new BillmateProduct($_product);
 
 					// is product taxable?
 					if ($_product->is_taxable())
@@ -1163,7 +1220,7 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 					$orderValues['Articles'][] = array(
 						'quantity'   => (int)$item['qty'],
 						'artnr'    => $sku,
-						'title'    => $item['name'],
+						'title'    => $billmateProduct->getTitle(),
 						'aprice'    =>  ($discount) ? ($billmate_item_standard_price_without_tax) : ($priceExcl),
 						'taxrate'      => (int)$item_tax_percentage,
 						'discount' => ($discount) ? round((1 - ($billmate_item_price_including_tax/$billmate_item_standard_price)) * 100 ,0) : 0,
@@ -1180,6 +1237,14 @@ class WC_Gateway_Billmate_Cardpay extends WC_Gateway_Billmate {
 
 				endif;
 			endforeach; endif;
+
+            /* Add additional fees that are not invoice fee to order API request as articles */
+            $orderFeesArticles = BillmateOrder::getOrderFeesAsOrderArticles();
+            $orderValues['Articles'] = array_merge($orderValues['Articles'], $orderFeesArticles);
+            foreach($orderFeesArticles AS $orderFeesArticle) {
+                $total += $orderFeesArticle['aprice'];
+                $totalTax += ($orderFeesArticle['aprice'] * ($orderFeesArticle['taxrate']/100));
+            }
 
 			// Discount
 			if ($order->order_discount>0) :
