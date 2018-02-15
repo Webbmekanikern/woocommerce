@@ -1,0 +1,25 @@
+.cart_totals{
+    margin: 30px 0 50px 0
+}
+
+
+#checkoutdiv {
+    position: relative;
+    overflow: auto;
+}
+
+.wc-proceed-to-checkout {
+    display:none!important;
+    height: 0px !important;
+    margin: 0px !important;
+    overflow: hidden !important;
+    padding: 0px !important;
+    position: relative !important;
+    width: 0px !important;
+}
+
+.woocommerce table.cart td.actions .input-text,
+.woocommerce-page #content table.cart td.actions .input-text,
+.woocommerce-page table.cart td.actions .input-text{
+    width: 140px !important
+}

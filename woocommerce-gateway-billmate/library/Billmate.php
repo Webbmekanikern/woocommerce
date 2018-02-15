@@ -38,11 +38,11 @@ class BillMate{
 	var $TEST = false;
 	var $DEBUG = false;
 	var $REFERER = false;
-	function BillMate($id,$key,$ssl=true,$test=false,$debug=false,$referer=array()){
+	function __construct($id,$key,$ssl=true,$test=false,$debug=false,$referer=array()){
 		$this->ID = $id;
 		$this->KEY = $key;
         defined('BILLMATE_CLIENT') || define('BILLMATE_CLIENT',  "BillMate:2.1.9" );
-        defined('BILLMATE_SERVER') || define('BILLMATE_SERVER',  "2.0.6" );
+        defined('BILLMATE_SERVER') || define('BILLMATE_SERVER',  "2.1.7" );
         defined('BILLMATE_LANGUAGE') || define('BILLMATE_LANGUAGE',  "" );
 		$this->SSL = $ssl;
 		$this->DEBUG = $debug;
@@ -54,6 +54,7 @@ class BillMate{
 	 	return $this->call($name,$args[0]);
 	}
 	function call($function,$params) {
+        $params = $this->trim_array($params);
 		$values = array(
 			"credentials" => array(
 				"id"=>$this->ID,
@@ -77,6 +78,15 @@ class BillMate{
 		}
 		return $this->verify_hash($response);
 	}
+    function trim_array($params = array()) {
+        $params = (is_string($params)) ? trim($params) : $params;
+        if(is_array($params)) {
+            foreach($params AS $key => $val) {
+                $params[$key] = $this->trim_array($val);
+            }
+        }
+        return $params;
+    }
 	function verify_hash($response) {
 		$response_array = is_array($response)?$response:json_decode($response,true);
 		//If it is not decodable, the actual response will be returnt.
